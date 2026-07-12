@@ -36,7 +36,9 @@ That makes the product structurally aligned with GenLayer's adjudication model.
 - Local activity tape for transaction and operator feedback
 - Local draft persistence in `localStorage`
 - Verdict mix chart and confidence trend chart
-- Direct-mode Python contract test scaffold for `genlayer-test`
+- Direct-mode Python contract tests for `genlayer-test`
+- Studio Mode integration smoke test for deploy/write/read roundtrip
+- CI workflow for typecheck plus direct contract tests
 
 ## Product Flow
 
@@ -131,6 +133,18 @@ tests/direct/
 - Python 3.12+ for contract-side tests
 - a browser wallet compatible with GenLayer workflows
 
+### Browser wallet recommendation
+
+For local GenLayer development, prefer the wallet path used by the official `genlayer-wallet` repository:
+
+- use `MetaMask Flask` for local wallet development and Snap-based GenLayer flows
+- use a dedicated development wallet only
+- keep localnet or Studionet selected before sending writes
+
+Reference:
+
+- https://github.com/genlayerlabs/genlayer-wallet
+
 ### Install frontend dependencies
 
 ```bash
@@ -166,9 +180,10 @@ NEXT_PUBLIC_GENLAYER_DEFAULT_CONTRACT_ADDRESS=
 
 Notes:
 
-- this MVP is browser-wallet first
+- this project is browser-wallet first
 - no burner private key is required
 - no hidden backend signer is used
+- for local dev and Studio-style testing, MetaMask Flask is the safest documented path
 
 ## Supported Networks
 
@@ -233,11 +248,12 @@ Before pushing or deploying, run:
 npm run genlayer:check
 npm run typecheck
 npm run build
+python -m pytest tests/direct -v
 ```
 
 ## Contract Testing
 
-The repo includes a first-pass direct-mode test scaffold for `genlayer-test`.
+The repo includes both direct-mode and Studio-mode testing scaffolds for `genlayer-test`.
 
 Suggested Python packages:
 
@@ -248,7 +264,7 @@ pip install genlayer-test pytest
 Then run:
 
 ```bash
-pytest tests/direct -v
+python -m pytest tests/direct -v
 ```
 
 Included test coverage focuses on:
@@ -257,6 +273,72 @@ Included test coverage focuses on:
 - resolution state transition
 - validator agreement behavior
 - citation filtering
+
+### Studio Mode integration test
+
+The repo now includes a Studio Mode smoke test at:
+
+```text
+tests/integration/test_studio_claim_roundtrip.py
+```
+
+This test covers:
+
+- contract deployment through RPC
+- on-chain claim creation
+- read-back verification of the stored claim
+- mocked validator-driven `resolve_case` execution over Studio Mode
+
+To run it:
+
+```bash
+set RUN_STUDIO_TESTS=1
+python -m pytest tests/integration -v -m studio
+```
+
+Prerequisites:
+
+- GenLayer Studio or Localnet running
+- `gltest.config.yaml` present in the repo root
+- Python environment with `genlayer-test` installed
+- `RUN_STUDIO_TESTS=1` set in the shell
+
+This Studio layer is intentionally aligned with the official `genlayer-test` guidance:
+
+- direct mode for fast unit and consensus checks
+- Studio Mode for a smaller set of end-to-end RPC tests
+- mock validators for controlled LLM and web responses before moving to live providers
+
+### gltest configuration
+
+The repo includes:
+
+```text
+gltest.config.yaml
+```
+
+It defines:
+
+- default network selection
+- wait intervals and retries
+- contracts and artifacts paths
+- environment file path
+
+## CI
+
+The repo now ships with:
+
+```text
+.github/workflows/ci.yml
+```
+
+Current CI runs:
+
+- `npm run genlayer:check`
+- `npm run typecheck`
+- `python -m pytest tests/direct -v`
+
+This keeps the browser app and contract logic from drifting apart.
 
 ## Deployment
 
@@ -276,11 +358,11 @@ No secret backend signer is required for the MVP.
 
 Create a new repository, commit, push, then connect the repo to Vercel.
 
-## Known MVP Boundaries
+## Known Project Boundaries
 
 - no autonomous backend runner yet
 - no multi-user backend database
-- no full Studio Mode integration test suite yet
+- only a Studio Mode smoke test so far, not a full end-to-end consensus matrix
 - no appeals workflow yet
 - no evidence source trust scoring yet
 
@@ -291,7 +373,7 @@ These are good follow-up milestones after the MVP is live.
 - add appeal and counter-evidence flow
 - add judge configuration presets by case type
 - add trust weighting for evidence domains
-- add Studio Mode integration tests
+- expand Studio Mode integration tests into a richer consensus suite
 - add richer case timeline and receipt linking
 - add hosted read-only leaderboard or queue explorer
 

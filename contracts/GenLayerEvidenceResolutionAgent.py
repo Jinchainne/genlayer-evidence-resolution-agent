@@ -77,10 +77,42 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
                 sort_keys=True,
             )
 
+        def parse_candidate(raw_candidate):
+            payload = raw_candidate.calldata if hasattr(raw_candidate, "calldata") else raw_candidate
+            parsed = json.loads(payload) if isinstance(payload, str) else payload
+            if not isinstance(parsed, dict):
+                return None
+
+            verdict = str(parsed.get("verdict", "")).upper()
+            if verdict not in ("SUPPORTED", "REFUTED", "INCONCLUSIVE"):
+                return None
+
+            try:
+                confidence = int(parsed.get("confidence", 0))
+            except (TypeError, ValueError):
+                return None
+
+            if confidence < 0 or confidence > 100:
+                return None
+
+            citations = parsed.get("citations", [])
+            if not isinstance(citations, list):
+                return None
+
+            filtered_citations = [url for url in citations if isinstance(url, str) and url in urls]
+
+            return {
+                "verdict": verdict,
+                "confidence": confidence,
+                "rationale": str(parsed.get("rationale", "")),
+                "citations": filtered_citations,
+            }
+
         def leader_fn() -> str:
             adjudication_input = get_input()
             return gl.nondet.exec_prompt(
                 f"""
+                Leader adjudication task.
                 Review the claim against the supplied evidence snapshots.
                 Return minified JSON with exactly these keys:
                 verdict, confidence, rationale, citations.
@@ -98,35 +130,53 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
             )
 
         def validator_fn(leader_result) -> bool:
-            if not isinstance(leader_result, str):
+            leader_candidate = parse_candidate(leader_result)
+            if leader_candidate is None:
                 return False
 
             adjudication_input = get_input()
-            verdict = gl.nondet.exec_prompt(
+            validator_raw = gl.nondet.exec_prompt(
                 f"""
-                You are validating a leader-produced adjudication.
-                Reply only true or false.
+                Independent validator adjudication task.
+                Review the same evidence and return your own minified JSON with exactly these keys:
+                verdict, confidence, rationale, citations.
 
-                Accept true only if:
-                - the candidate output is valid minified JSON
-                - verdict is exactly SUPPORTED, REFUTED, or INCONCLUSIVE
-                - confidence is an integer from 0 to 100
-                - rationale is grounded only in the supplied evidence
-                - citations use only supplied URLs
-                - the result meaningfully adjudicates the claim
+                verdict must be one of:
+                SUPPORTED, REFUTED, INCONCLUSIVE
+
+                confidence must be an integer from 0 to 100.
+                rationale must be a short explanation grounded only in the evidence.
+                citations must be a JSON array of URLs chosen only from the supplied evidence URLs.
 
                 Input:
                 {adjudication_input}
-
-                Candidate output:
-                {leader_result}
                 """
             )
-            return verdict.strip().lower() == "true"
+            validator_candidate = parse_candidate(validator_raw)
+            if validator_candidate is None:
+                return False
+
+            if leader_candidate["verdict"] != validator_candidate["verdict"]:
+                return False
+
+            if abs(leader_candidate["confidence"] - validator_candidate["confidence"]) > 15:
+                return False
+
+            if leader_candidate["verdict"] != "INCONCLUSIVE":
+                leader_citations = set(leader_candidate["citations"])
+                validator_citations = set(validator_candidate["citations"])
+                if not leader_citations:
+                    return False
+                if validator_citations and not (leader_citations & validator_citations):
+                    return False
+
+            return True
 
         result = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 
-        parsed = json.loads(result) if isinstance(result, str) else result
+        parsed = parse_candidate(result)
+        if parsed is None:
+            raise gl.vm.UserError("Consensus result could not be parsed into a valid adjudication payload.")
         resolution = {
             "verdict": parsed.get("verdict", "INCONCLUSIVE"),
             "confidence": int(parsed.get("confidence", 0)),

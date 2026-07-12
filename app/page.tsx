@@ -179,7 +179,7 @@ export default function Page() {
   async function connectWallet() {
     const ethereum = (window as Window & { ethereum?: { request: (input: { method: string }) => Promise<unknown> } }).ethereum;
     if (!ethereum) {
-      setStatusMessage("No injected wallet detected. Install MetaMask or Rabby.");
+      setStatusMessage("No injected wallet detected. For local GenLayer dev, install MetaMask Flask or another compatible injected wallet.");
       appendActivity("Wallet connection failed: no injected provider found.", "bad");
       return;
     }
@@ -470,6 +470,9 @@ export default function Page() {
                 This MVP is a GenLayer-native claim review agent. It uses GenLayer intelligent contracts to fetch
                 live evidence and produce a meaningful non-deterministic verdict that validators can accept through
                 the Equivalence Principle.
+              </p>
+              <p className="mt-3 max-w-3xl text-xs leading-6 text-terminal-muted">
+                Local browser-wallet development is smoothest with MetaMask Flask following the official GenLayer wallet flow.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Badge tone="positive">GENLAYER NATIVE</Badge>

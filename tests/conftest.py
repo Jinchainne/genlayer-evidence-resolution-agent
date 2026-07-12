@@ -3,6 +3,8 @@ import tempfile
 
 import pytest
 
+pytest_plugins = ("gltest.fixtures",)
+
 
 @pytest.fixture(autouse=True)
 def patch_gltest_windows_stdin(monkeypatch):

@@ -27,7 +27,7 @@ def test_resolve_case_persists_verdict_and_filters_citations(direct_vm, direct_d
     direct_vm.mock_web(r"example\.com/a", {"status": 200, "body": "primary source says listed"})
     direct_vm.mock_web(r"example\.com/b", {"status": 200, "body": "secondary source agrees"})
     direct_vm.mock_llm(
-        r".*Return minified JSON.*",
+        r".*Leader adjudication task\..*",
         json.dumps(
             {
                 "verdict": "SUPPORTED",
@@ -37,7 +37,17 @@ def test_resolve_case_persists_verdict_and_filters_citations(direct_vm, direct_d
             }
         ),
     )
-    direct_vm.mock_llm(r".*Reply only true or false.*", "true")
+    direct_vm.mock_llm(
+        r".*Independent validator adjudication task\..*",
+        json.dumps(
+            {
+                "verdict": "SUPPORTED",
+                "confidence": 81,
+                "rationale": "Independent pass supports the same listing claim.",
+                "citations": ["https://example.com/a"],
+            }
+        ),
+    )
 
     contract.create_case(
         "Listing",
@@ -70,7 +80,7 @@ def test_validator_disagrees_on_meaningfully_different_output(direct_vm, direct_
 
     direct_vm.mock_web(r"example\.com/security", {"status": 200, "body": "incident report text"})
     direct_vm.mock_llm(
-        r".*Return minified JSON.*",
+        r".*Leader adjudication task\..*",
         json.dumps(
             {
                 "verdict": "REFUTED",
@@ -80,12 +90,32 @@ def test_validator_disagrees_on_meaningfully_different_output(direct_vm, direct_
             }
         ),
     )
-    direct_vm.mock_llm(r".*Reply only true or false.*", "true")
+    direct_vm.mock_llm(
+        r".*Independent validator adjudication task\..*",
+        json.dumps(
+            {
+                "verdict": "REFUTED",
+                "confidence": 79,
+                "rationale": "Independent pass also sees a false alarm.",
+                "citations": ["https://example.com/security"],
+            }
+        ),
+    )
 
     contract.resolve_case(1)
 
     direct_vm.clear_mocks()
     direct_vm.mock_web(r"example\.com/security", {"status": 200, "body": "incident report text"})
-    direct_vm.mock_llm(r".*Reply only true or false.*", "false")
+    direct_vm.mock_llm(
+        r".*Independent validator adjudication task\..*",
+        json.dumps(
+            {
+                "verdict": "SUPPORTED",
+                "confidence": 81,
+                "rationale": "Independent pass sees a confirmed exploit instead.",
+                "citations": ["https://example.com/security"],
+            }
+        ),
+    )
 
     assert direct_vm.run_validator() is False

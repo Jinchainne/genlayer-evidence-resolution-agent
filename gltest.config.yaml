@@ -1,0 +1,18 @@
+networks:
+  default: localnet
+  localnet:
+    leader_only: false
+    default_wait_interval: 3000
+    default_wait_retries: 80
+  studionet:
+    leader_only: false
+    default_wait_interval: 4000
+    default_wait_retries: 120
+  testnet_bradbury:
+    leader_only: false
+    default_wait_interval: 5000
+    default_wait_retries: 160
+paths:
+  contracts: contracts
+  artifacts: artifacts
+environment: .env.local
