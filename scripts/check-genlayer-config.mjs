@@ -43,4 +43,17 @@ for (const pattern of ["gl.nondet.web.get", "gl.nondet.exec_prompt", "gl.vm.run_
   }
 }
 
+const embeddedContractSource = fs.readFileSync(path.join(cwd, "lib/genlayer/contractSource.ts"), "utf8");
+const sourceMatch = embeddedContractSource.match(/GENLAYER_CONTRACT_SOURCE = `([\s\S]*)`;/);
+if (!sourceMatch) {
+  console.error("Unable to locate embedded contract source in lib/genlayer/contractSource.ts");
+  process.exit(1);
+}
+
+const normalize = (value) => value.replace(/\r\n/g, "\n").trim();
+if (normalize(sourceMatch[1]) !== normalize(contractText)) {
+  console.error("Embedded deployable contract source is out of sync with contracts/GenLayerEvidenceResolutionAgent.py");
+  process.exit(1);
+}
+
 console.log("GenLayer MVP config check passed.");
