@@ -8,7 +8,7 @@ import typing
 class GenLayerEvidenceResolutionAgent(gl.Contract):
     next_case_id: bigint
     case_count: bigint
-    cases: TreeMap[bigint, str]
+    cases: TreeMap[str, str]
 
     def __init__(self):
         self.next_case_id = 1
@@ -40,7 +40,7 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
             "resolution": None,
         }
 
-        self.cases[case_id] = json.dumps(record, sort_keys=True)
+        self.cases[self._case_key(case_id)] = json.dumps(record, sort_keys=True)
         self.next_case_id += 1
         self.case_count += 1
         return case_id
@@ -53,29 +53,6 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
             return json.dumps(record["resolution"], sort_keys=True)
 
         urls = record["evidence_urls"][:3]
-
-        def get_input() -> str:
-            evidence_snapshots = []
-            for url in urls:
-                response = gl.nondet.web.get(url)
-                body = response.body.decode("utf-8")
-                evidence_snapshots.append(
-                    {
-                        "url": url,
-                        "content": body[:6000],
-                    }
-                )
-
-            return json.dumps(
-                {
-                    "title": record["title"],
-                    "claim": record["claim"],
-                    "criteria": record["criteria"],
-                    "category": record["category"],
-                    "evidence": evidence_snapshots,
-                },
-                sort_keys=True,
-            )
 
         def parse_candidate(raw_candidate):
             payload = raw_candidate.calldata if hasattr(raw_candidate, "calldata") else raw_candidate
@@ -109,7 +86,27 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
             }
 
         def leader_fn() -> str:
-            adjudication_input = get_input()
+            evidence_snapshots = []
+            for url in urls:
+                response = gl.nondet.web.get(url)
+                body = response.body.decode("utf-8")
+                evidence_snapshots.append(
+                    {
+                        "url": url,
+                        "content": body[:6000],
+                    }
+                )
+
+            adjudication_input = json.dumps(
+                {
+                    "title": record["title"],
+                    "claim": record["claim"],
+                    "criteria": record["criteria"],
+                    "category": record["category"],
+                    "evidence": evidence_snapshots,
+                },
+                sort_keys=True,
+            )
             return gl.nondet.exec_prompt(
                 f"""
                 Leader adjudication task.
@@ -134,7 +131,27 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
             if leader_candidate is None:
                 return False
 
-            adjudication_input = get_input()
+            evidence_snapshots = []
+            for url in urls:
+                response = gl.nondet.web.get(url)
+                body = response.body.decode("utf-8")
+                evidence_snapshots.append(
+                    {
+                        "url": url,
+                        "content": body[:6000],
+                    }
+                )
+
+            adjudication_input = json.dumps(
+                {
+                    "title": record["title"],
+                    "claim": record["claim"],
+                    "criteria": record["criteria"],
+                    "category": record["category"],
+                    "evidence": evidence_snapshots,
+                },
+                sort_keys=True,
+            )
             validator_raw = gl.nondet.exec_prompt(
                 f"""
                 Independent validator adjudication task.
@@ -188,12 +205,12 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
 
         record["status"] = "RESOLVED"
         record["resolution"] = resolution
-        self.cases[case_id] = json.dumps(record, sort_keys=True)
+        self.cases[self._case_key(case_id)] = json.dumps(record, sort_keys=True)
         return json.dumps(resolution, sort_keys=True)
 
     @gl.public.view
     def get_case(self, case_id: bigint) -> str:
-        return self.cases.get(case_id, "")
+        return self.cases.get(self._case_key(case_id), "")
 
     @gl.public.view
     def get_case_count(self) -> bigint:
@@ -204,13 +221,16 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
         rows = []
         upper = int(start + limit)
         for case_id in range(int(start), upper):
-            case_json = self.cases.get(case_id, "")
+            case_json = self.cases.get(self._case_key(case_id), "")
             if case_json:
                 rows.append(json.loads(case_json))
         return json.dumps(rows, sort_keys=True)
 
     def _get_case_record(self, case_id: bigint) -> dict:
-        case_json = self.cases.get(case_id, "")
+        case_json = self.cases.get(self._case_key(case_id), "")
         if not case_json:
             raise gl.vm.UserError("Case not found.")
         return json.loads(case_json)
+
+    def _case_key(self, case_id: bigint) -> str:
+        return str(case_id)

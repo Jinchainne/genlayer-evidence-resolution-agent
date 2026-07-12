@@ -246,6 +246,7 @@ Before pushing or deploying, run:
 
 ```bash
 npm run genlayer:check
+npm run contract:check
 npm run typecheck
 npm run build
 python -m pytest tests/direct -v
@@ -258,14 +259,17 @@ The repo includes both direct-mode and Studio-mode testing scaffolds for `genlay
 Suggested Python packages:
 
 ```bash
-pip install genlayer-test pytest
+pip install genlayer-test genvm-linter pytest
 ```
 
 Then run:
 
 ```bash
+npm run contract:check
 python -m pytest tests/direct -v
 ```
+
+`npm run contract:check` wraps `genvm-lint check` with UTF-8 output enabled so it works cleanly on Windows PowerShell as well as CI.
 
 Included test coverage focuses on:
 
@@ -335,6 +339,7 @@ The repo now ships with:
 Current CI runs:
 
 - `npm run genlayer:check`
+- `npm run contract:check`
 - `npm run typecheck`
 - `python -m pytest tests/direct -v`
 

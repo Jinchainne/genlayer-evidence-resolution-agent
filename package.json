@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json",
     "genlayer:check": "node scripts/check-genlayer-config.mjs",
+    "contract:check": "python scripts/run-genvm-lint.py check contracts/GenLayerEvidenceResolutionAgent.py",
     "test:direct": "python -m pytest tests/direct -v",
     "test:studio": "python -m pytest tests/integration -v -m studio"
   },

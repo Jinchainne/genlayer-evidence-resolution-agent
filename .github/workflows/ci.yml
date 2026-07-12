@@ -32,6 +32,9 @@ jobs:
       - name: GenLayer config check
         run: npm run genlayer:check
 
+      - name: Contract check
+        run: npm run contract:check
+
       - name: Typecheck
         run: npm run typecheck
 
