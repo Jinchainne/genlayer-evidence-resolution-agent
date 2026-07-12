@@ -444,6 +444,30 @@ export default function Page() {
     [stats]
   );
 
+  const deployReadiness = useMemo(() => {
+    if (!walletConnected || !walletAddress) {
+      return {
+        label: "Wallet required",
+        detail: "Connect MetaMask Flask or another compatible GenLayer wallet before deploying.",
+        tone: "negative" as const
+      };
+    }
+
+    if (chainId !== null && chainId !== currentNetwork.chainId) {
+      return {
+        label: "Wrong chain",
+        detail: `Wallet is on chain ${chainId}. Switch to ${currentNetwork.label} (${currentNetwork.chainId}) first.`,
+        tone: "negative" as const
+      };
+    }
+
+    return {
+      label: "Deploy ready",
+      detail: `Wallet and selected network are aligned for ${currentNetwork.label}.`,
+      tone: "positive" as const
+    };
+  }, [chainId, currentNetwork.chainId, currentNetwork.label, walletAddress, walletConnected]);
+
   return (
     <main className="min-h-screen px-4 py-6 md:px-6">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
@@ -703,9 +727,23 @@ export default function Page() {
                 <PanelRow label="Deploy Tx" value={deployTxHash ? formatAddress(deployTxHash) : "None"} />
                 <PanelRow label="Source" value="GenLayerEvidenceResolutionAgent.py" />
                 <PanelRow label="Prompt Mode" value="Non-comparative adjudication" />
+                <PanelRow label="Deploy Status" value={deployReadiness.label} />
+              </div>
+              <div
+                className={`mt-4 border px-3 py-3 text-xs leading-6 ${
+                  deployReadiness.tone === "positive"
+                    ? "border-terminal-positive bg-[#dff0de] text-terminal-positive"
+                    : "border-terminal-negative bg-[#f3ddd8] text-terminal-negative"
+                }`}
+              >
+                {deployReadiness.detail}
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={deployContract} disabled={busyAction === "deploy"}>
+                {!walletConnected ? <Button onClick={connectWallet}>Connect Wallet</Button> : null}
+                <Button
+                  onClick={deployContract}
+                  disabled={busyAction === "deploy" || deployReadiness.tone !== "positive"}
+                >
                   {busyAction === "deploy" ? "Deploying..." : "Deploy Contract"}
                 </Button>
                 <Button variant="ghost" onClick={() => refreshChainCases().catch(() => undefined)}>
