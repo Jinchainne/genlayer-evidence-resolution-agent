@@ -444,6 +444,40 @@ export default function Page() {
     [stats]
   );
 
+  const queueSeries = useMemo(
+    () =>
+      chainCases
+        .slice()
+        .reverse()
+        .map((entry, index, rows) => ({
+          caseId: `#${entry.id}`,
+          openCases: rows.length - index,
+          stageScore: entry.status === "RESOLVED" ? 100 : 35,
+          status: entry.status
+        })),
+    [chainCases]
+  );
+
+  const verdictChart = useMemo(() => {
+    if (stats.resolved > 0) {
+      return {
+        title: "Verdict Mix",
+        detail: "Resolved verdict distribution",
+        data: verdictMix
+      };
+    }
+
+    return {
+      title: "Queue Mix",
+      detail: "Live case queue while the first resolved verdict is still pending",
+      data: [
+        { label: "SUBMITTED", total: stats.unresolved },
+        { label: "RESOLVED", total: stats.resolved },
+        { label: "LOCAL", total: localDrafts.length }
+      ]
+    };
+  }, [localDrafts.length, stats.resolved, stats.unresolved, verdictMix]);
+
   const deployReadiness = useMemo(() => {
     if (!walletConnected || !walletAddress) {
       return {
@@ -610,33 +644,64 @@ export default function Page() {
 
             <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
               <Card className="p-4">
-                <SectionHeader title="Verdict Mix" detail="Resolved verdict distribution" />
+                <SectionHeader title={verdictChart.title} detail={verdictChart.detail} />
                 <div className="mt-4 h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={verdictMix}>
+                    <BarChart data={verdictChart.data}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#d8cfb6" />
                       <XAxis dataKey="label" tick={{ fill: "#786f5f", fontSize: 11 }} />
-                      <YAxis allowDecimals={false} tick={{ fill: "#786f5f", fontSize: 11 }} />
+                      <YAxis allowDecimals={false} domain={[0, "auto"]} tick={{ fill: "#786f5f", fontSize: 11 }} />
                       <Tooltip />
                       <Bar dataKey="total" fill="#a66f10" radius={[2, 2, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                {stats.resolved === 0 ? (
+                  <div className="mt-3 border border-terminal-border bg-terminal-panelAlt px-3 py-3 text-xs text-terminal-muted">
+                    No resolved verdict yet. The chart is showing live queue composition until `resolve_case(...)`
+                    writes the first adjudication result on-chain.
+                  </div>
+                ) : null}
               </Card>
 
               <Card className="p-4">
-                <SectionHeader title="Confidence Trail" detail="Resolved claim confidence over time" />
+                <SectionHeader
+                  title={confidenceSeries.length > 0 ? "Confidence Trail" : "Queue Readiness"}
+                  detail={
+                    confidenceSeries.length > 0
+                      ? "Resolved claim confidence over time"
+                      : "Live queue depth until the first non-deterministic verdict lands on-chain"
+                  }
+                />
                 <div className="mt-4 h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={confidenceSeries}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#d8cfb6" />
-                      <XAxis dataKey="caseId" tick={{ fill: "#786f5f", fontSize: 11 }} />
-                      <YAxis domain={[0, 100]} tick={{ fill: "#786f5f", fontSize: 11 }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="confidence" stroke="#23934d" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  {confidenceSeries.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={confidenceSeries}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#d8cfb6" />
+                        <XAxis dataKey="caseId" tick={{ fill: "#786f5f", fontSize: 11 }} />
+                        <YAxis domain={[0, 100]} tick={{ fill: "#786f5f", fontSize: 11 }} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="confidence" stroke="#23934d" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={queueSeries}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#d8cfb6" />
+                        <XAxis dataKey="caseId" tick={{ fill: "#786f5f", fontSize: 11 }} />
+                        <YAxis domain={[0, Math.max(queueSeries.length + 1, 3)]} tick={{ fill: "#786f5f", fontSize: 11 }} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="openCases" stroke="#a66f10" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
+                {confidenceSeries.length === 0 ? (
+                  <div className="mt-3 border border-terminal-border bg-terminal-panelAlt px-3 py-3 text-xs text-terminal-muted">
+                    Confidence history will appear after the first successful `resolve_case(...)` transaction. Until
+                    then, this panel shows live queue depth from the real on-chain case list.
+                  </div>
+                ) : null}
               </Card>
             </div>
 
