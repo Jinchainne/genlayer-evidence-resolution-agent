@@ -35,6 +35,7 @@ export async function deployEvidenceContract(
   provider: unknown
 ) {
   const walletClient = await ensureWalletNetwork(networkKey, account, provider);
+  const readClient = getReadClient(networkKey);
   const hash = await walletClient.deployContract({
     code: GENLAYER_CONTRACT_SOURCE,
     args: []
@@ -44,13 +45,42 @@ export async function deployEvidenceContract(
     status: TransactionStatus.ACCEPTED
   });
 
-  const contractAddress =
+  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    let traceDetail = "";
+    try {
+      const trace = await readClient.debugTraceTransaction({
+        hash: hash as `0x${string}` & { length: 66 }
+      });
+      const stderr = typeof trace?.stderr === "string" ? trace.stderr.trim() : "";
+      const resultCode = typeof trace?.result_code === "number" ? ` result_code=${trace.result_code}` : "";
+      traceDetail = stderr ? ` ${stderr}${resultCode}` : resultCode;
+    } catch {
+      traceDetail = "";
+    }
+
+    throw new Error(`Contract deployment was accepted by consensus but execution failed.${traceDetail}`);
+  }
+
+  const receiptContractAddress =
     receipt.txDataDecoded && "contractAddress" in receipt.txDataDecoded
       ? (receipt.txDataDecoded.contractAddress as string | undefined)
       : undefined;
 
+  const tx =
+    receiptContractAddress || "recipient" in receipt
+      ? receipt
+      : await readClient.getTransaction({
+          hash: hash as `0x${string}` & { length: 66 }
+        });
+
+  const contractAddress =
+    receiptContractAddress ??
+    (tx.txDataDecoded && "contractAddress" in tx.txDataDecoded ? (tx.txDataDecoded.contractAddress as string | undefined) : undefined) ??
+    ("recipient" in tx && typeof tx.recipient === "string" ? tx.recipient : undefined) ??
+    ("to_address" in tx && typeof tx.to_address === "string" ? tx.to_address : undefined);
+
   if (!contractAddress) {
-    throw new Error("Contract deployment receipt did not include a contract address.");
+    throw new Error("Contract deployment succeeded but no contract address could be decoded from the transaction.");
   }
 
   return {
