@@ -478,6 +478,113 @@ export default function Page() {
     };
   }, [localDrafts.length, stats.resolved, stats.unresolved, verdictMix]);
 
+  const draftSignals = useMemo(() => {
+    const cleanedUrls = draft.evidenceUrls.filter((entry) => entry.trim().length > 0);
+    const primarySources = cleanedUrls.filter((entry) => /^https?:\/\//i.test(entry)).length;
+    const hasTitle = draft.title.trim().length > 0;
+    const hasClaim = draft.claim.trim().length > 40;
+    const hasCriteria = draft.criteria.trim().length > 40;
+    const categorySet = draft.category.trim().length > 0;
+    const evidenceDiversity = new Set(
+      cleanedUrls
+        .map((entry) => {
+          try {
+            return new URL(entry).hostname.replace(/^www\./, "");
+          } catch {
+            return entry;
+          }
+        })
+        .filter(Boolean)
+    ).size;
+
+    const score = Math.max(
+      0,
+      Math.min(
+        100,
+        (hasTitle ? 18 : 0) +
+          (hasClaim ? 22 : 0) +
+          (hasCriteria ? 22 : 0) +
+          (categorySet ? 8 : 0) +
+          Math.min(primarySources, 3) * 10 +
+          Math.min(evidenceDiversity, 3) * 10
+      )
+    );
+
+    return {
+      cleanedUrls,
+      score,
+      evidenceDiversity,
+      checks: [
+        { label: "Title set", ok: hasTitle },
+        { label: "Claim specific", ok: hasClaim },
+        { label: "Criteria detailed", ok: hasCriteria },
+        { label: "Category tagged", ok: categorySet },
+        { label: "At least 1 source", ok: primarySources >= 1 },
+        { label: "Source diversity", ok: evidenceDiversity >= 2 }
+      ]
+    };
+  }, [draft.category, draft.claim, draft.criteria, draft.evidenceUrls, draft.title]);
+
+  const executionTimeline = useMemo(() => {
+    const phases = EXECUTION_PHASES.map((phase) => ({
+      phase,
+      state: "pending" as "pending" | "active" | "done"
+    }));
+
+    const setStateThrough = (activeIndex: number) =>
+      phases.map((entry, index) => ({
+        ...entry,
+        state: index < activeIndex ? ("done" as const) : index === activeIndex ? ("active" as const) : ("pending" as const)
+      }));
+
+    if (busyAction === "deploy") {
+      return {
+        detail: "Deploying intelligent contract to the selected GenLayer environment.",
+        phases: setStateThrough(4)
+      };
+    }
+
+    if (busyAction === "submit") {
+      return {
+        detail: "Submitting claim payload and evidence manifest on-chain.",
+        phases: setStateThrough(1)
+      };
+    }
+
+    if (busyAction.startsWith("resolve-")) {
+      return {
+        detail: "Fetching evidence, comparing sources, and waiting for GenLayer consensus on the verdict.",
+        phases: setStateThrough(3)
+      };
+    }
+
+    if (stats.resolved > 0) {
+      return {
+        detail: "At least one adjudication cycle completed and was committed back into contract state.",
+        phases: phases.map((entry) => ({ ...entry, state: "done" as const }))
+      };
+    }
+
+    if (stats.unresolved > 0) {
+      return {
+        detail: "Claims are on-chain and waiting for the first real `resolve_case(...)` cycle.",
+        phases: setStateThrough(2)
+      };
+    }
+
+    if (draftSignals.score > 0) {
+      return {
+        detail: "Draft is being prepared locally. Submit it to start a real adjudication cycle.",
+        phases: setStateThrough(0)
+      };
+    }
+
+    return {
+      detail: "Agent is idle. Load a template, refine the claim, then submit it on-chain.",
+      phases
+    };
+  }, [busyAction, draftSignals.score, stats.resolved, stats.unresolved]);
+
   const deployReadiness = useMemo(() => {
     if (!walletConnected || !walletAddress) {
       return {
@@ -566,58 +673,126 @@ export default function Page() {
                   </Button>
                 ))}
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted">
-                  <span>Title</span>
-                  <Input
-                    value={draft.title}
-                    onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                    placeholder="Protocol exploit allegation"
-                  />
-                </label>
-                <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted">
-                  <span>Category</span>
-                  <Input
-                    value={draft.category}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
-                    placeholder="Security Review"
-                  />
-                </label>
-                <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
-                  <span>Claim Statement</span>
-                  <textarea
-                    className="min-h-28 w-full border border-terminal-border bg-terminal-panelAlt px-3 py-2 text-sm text-terminal-text outline-none placeholder:text-terminal-muted focus:border-terminal-accent"
-                    value={draft.claim}
-                    onChange={(event) => setDraft((current) => ({ ...current, claim: event.target.value }))}
-                    placeholder="State the claim the contract should adjudicate."
-                  />
-                </label>
-                <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
-                  <span>Resolution Criteria</span>
-                  <textarea
-                    className="min-h-24 w-full border border-terminal-border bg-terminal-panelAlt px-3 py-2 text-sm text-terminal-text outline-none placeholder:text-terminal-muted focus:border-terminal-accent"
-                    value={draft.criteria}
-                    onChange={(event) => setDraft((current) => ({ ...current, criteria: event.target.value }))}
-                    placeholder="Explain what counts as supported, refuted, or inconclusive."
-                  />
-                </label>
-                {draft.evidenceUrls.map((url, index) => (
-                  <label key={`evidence-${index}`} className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
-                    <span>Evidence URL {index + 1}</span>
+              <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted">
+                    <span>Title</span>
                     <Input
-                      value={url}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          evidenceUrls: current.evidenceUrls.map((entry, entryIndex) =>
-                            entryIndex === index ? event.target.value : entry
-                          )
-                        }))
-                      }
-                      placeholder="https://..."
+                      value={draft.title}
+                      onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="Protocol exploit allegation"
                     />
                   </label>
-                ))}
+                  <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted">
+                    <span>Category</span>
+                    <Input
+                      value={draft.category}
+                      onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                      placeholder="Security Review"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
+                    <span>Claim Statement</span>
+                    <textarea
+                      className="min-h-28 w-full border border-terminal-border bg-terminal-panelAlt px-3 py-2 text-sm text-terminal-text outline-none placeholder:text-terminal-muted focus:border-terminal-accent"
+                      value={draft.claim}
+                      onChange={(event) => setDraft((current) => ({ ...current, claim: event.target.value }))}
+                      placeholder="State the claim the contract should adjudicate."
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
+                    <span>Resolution Criteria</span>
+                    <textarea
+                      className="min-h-24 w-full border border-terminal-border bg-terminal-panelAlt px-3 py-2 text-sm text-terminal-text outline-none placeholder:text-terminal-muted focus:border-terminal-accent"
+                      value={draft.criteria}
+                      onChange={(event) => setDraft((current) => ({ ...current, criteria: event.target.value }))}
+                      placeholder="Explain what counts as supported, refuted, or inconclusive."
+                    />
+                  </label>
+                  {draft.evidenceUrls.map((url, index) => (
+                    <label key={`evidence-${index}`} className="space-y-2 text-xs uppercase tracking-[0.18em] text-terminal-muted md:col-span-2">
+                      <span>Evidence URL {index + 1}</span>
+                      <Input
+                        value={url}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            evidenceUrls: current.evidenceUrls.map((entry, entryIndex) =>
+                              entryIndex === index ? event.target.value : entry
+                            )
+                          }))
+                        }
+                        placeholder="https://..."
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="border border-terminal-border bg-terminal-panelAlt p-3">
+                    <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.2em] text-terminal-muted">
+                      <span>Draft Readiness</span>
+                      <span>{draftSignals.score}/100</span>
+                    </div>
+                    <div className="mt-3 h-3 border border-terminal-border bg-terminal-background">
+                      <div
+                        className="h-full bg-terminal-positive transition-all"
+                        style={{ width: `${draftSignals.score}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {draftSignals.checks.map((check) => (
+                        <div key={check.label} className="flex items-center justify-between gap-3 text-xs">
+                          <span className="text-terminal-muted">{check.label}</span>
+                          <span className={check.ok ? "text-terminal-positive" : "text-terminal-negative"}>
+                            {check.ok ? "PASS" : "MISS"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border border-terminal-border bg-terminal-panelAlt p-3">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-terminal-muted">Evidence Topology</div>
+                    <div className="mt-3 grid gap-2 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-terminal-muted">Sources attached</span>
+                        <span className="text-terminal-text">{draftSignals.cleanedUrls.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-terminal-muted">Unique domains</span>
+                        <span className="text-terminal-text">{draftSignals.evidenceDiversity}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-terminal-muted">Planner view</span>
+                        <span className="text-terminal-text">
+                          {draftSignals.score >= 75 ? "High quality" : draftSignals.score >= 45 ? "Workable" : "Thin"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {draftSignals.cleanedUrls.length > 0 ? (
+                        draftSignals.cleanedUrls.map((url) => (
+                          <span key={url} className="border border-terminal-border px-2 py-1 text-[10px] text-terminal-muted">
+                            {safeHostname(url)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-terminal-muted">No evidence hosts attached yet.</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border border-terminal-border bg-terminal-panelAlt p-3">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-terminal-muted">Adjudication Route</div>
+                    <div className="mt-3 grid gap-2 text-xs text-terminal-muted">
+                      <div>1. Persist claim metadata and source manifest on-chain.</div>
+                      <div>2. Fetch live source snapshots inside GenLayer.</div>
+                      <div>3. Compare evidence against claim criteria.</div>
+                      <div>4. Ask validators to accept a structured verdict.</div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button onClick={saveDraftLocally}>Save Draft</Button>
@@ -834,17 +1009,24 @@ export default function Page() {
 
             <Card className="p-4">
               <SectionHeader title="Execution Cycle" detail="Agent loop state adapted for GenLayer adjudication." />
+              <div className="mt-3 border border-terminal-border bg-terminal-panelAlt px-3 py-3 text-xs text-terminal-muted">
+                {executionTimeline.detail}
+              </div>
               <div className="mt-4 grid grid-cols-5 gap-2 text-center text-xs uppercase tracking-[0.18em]">
-                {EXECUTION_PHASES.map((phase, index) => (
+                {executionTimeline.phases.map((entry, index) => (
                   <div
-                    key={phase}
+                    key={entry.phase}
                     className={`border px-2 py-3 ${
-                      index === phaseIndex
+                      entry.state === "active"
                         ? "border-terminal-positive bg-[#dff0de] text-terminal-positive"
-                        : "border-terminal-border text-terminal-muted"
+                        : entry.state === "done"
+                          ? "border-terminal-border bg-terminal-panelAlt text-terminal-text"
+                          : index === phaseIndex && busyAction === ""
+                            ? "border-terminal-accent bg-[#efe6cc] text-terminal-accent"
+                            : "border-terminal-border text-terminal-muted"
                     }`}
                   >
-                    {phase}
+                    {entry.phase}
                   </div>
                 ))}
               </div>
@@ -991,6 +1173,14 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 
 function EmptyRow({ message }: { message: string }) {
   return <div className="border border-terminal-border px-3 py-3 text-terminal-muted">{message}</div>;
+}
+
+function safeHostname(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return value.replace(/^https?:\/\//i, "").slice(0, 28) || "invalid-source";
+  }
 }
 
 function toneClassName(tone: AgentActivity["tone"]) {
