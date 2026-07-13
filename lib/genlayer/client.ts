@@ -61,10 +61,21 @@ export async function deployEvidenceContract(
     throw new Error(`Contract deployment was accepted by consensus but execution failed.${traceDetail}`);
   }
 
-  const receiptContractAddress =
+  const receiptDataContractAddress =
+    "data" in receipt &&
+    receipt.data &&
+    typeof receipt.data === "object" &&
+    "contract_address" in receipt.data &&
+    typeof receipt.data.contract_address === "string"
+      ? receipt.data.contract_address
+      : undefined;
+
+  const decodedReceiptContractAddress =
     receipt.txDataDecoded && "contractAddress" in receipt.txDataDecoded
       ? (receipt.txDataDecoded.contractAddress as string | undefined)
       : undefined;
+
+  const receiptContractAddress = receiptDataContractAddress ?? decodedReceiptContractAddress;
 
   const tx =
     receiptContractAddress || "recipient" in receipt
