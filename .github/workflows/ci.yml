@@ -41,6 +41,7 @@ jobs:
       - name: Direct tests
         shell: bash
         run: |
+          set +e
           set -o pipefail
           python -m pytest tests/direct -vv -ra 2>&1 | tee pytest-direct.log
           status=${PIPESTATUS[0]}
