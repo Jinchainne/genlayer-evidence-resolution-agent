@@ -8,6 +8,10 @@ pytest_plugins = ("gltest.fixtures",)
 
 @pytest.fixture(autouse=True)
 def patch_gltest_windows_stdin(monkeypatch):
+    if os.name != "nt":
+        yield
+        return
+
     import gltest.direct.loader as loader
 
     def _inject_message_to_fd0_windows_safe(vm):
