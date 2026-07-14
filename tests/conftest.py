@@ -1,5 +1,7 @@
 import os
 import tempfile
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -9,6 +11,46 @@ pytest_plugins = ("gltest.fixtures",)
 def pytest_configure(config):
     if not config.pluginmanager.hasplugin("gltest_direct"):
         config.pluginmanager.import_plugin("gltest.direct.pytest_plugin")
+
+
+def _patch_gltest_release_fallback():
+    import gltest.direct.sdk_loader as sdk_loader
+
+    original_download_artifacts = sdk_loader.download_artifacts
+
+    def download_artifacts_with_fallback(version: str):
+        try:
+            return original_download_artifacts(version)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+
+            sdk_loader.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            tarball_name = f"genvm-universal-{version}.tar.xz"
+            tarball_path = sdk_loader.CACHE_DIR / tarball_name
+            fallback_url = f"{sdk_loader.GITHUB_RELEASES_URL}/download/{version}/genvm-runners-all.tar.xz"
+
+            print(f"Falling back to {fallback_url}...")
+            request = urllib.request.Request(fallback_url)
+            request.add_header("User-Agent", "gltest-direct")
+
+            with urllib.request.urlopen(request, timeout=300) as response:
+                fd, temp_path = tempfile.mkstemp(dir=sdk_loader.CACHE_DIR)
+                try:
+                    with os.fdopen(fd, "wb") as tmp:
+                        tmp.write(response.read())
+                    os.replace(temp_path, tarball_path)
+                except Exception:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise
+
+            return tarball_path
+
+    sdk_loader.download_artifacts = download_artifacts_with_fallback
+
+
+_patch_gltest_release_fallback()
 
 
 @pytest.fixture(autouse=True)
