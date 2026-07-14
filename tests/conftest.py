@@ -6,6 +6,11 @@ import pytest
 pytest_plugins = ("gltest.fixtures",)
 
 
+def pytest_configure(config):
+    if not config.pluginmanager.hasplugin("gltest_direct"):
+        config.pluginmanager.import_plugin("gltest.direct.pytest_plugin")
+
+
 @pytest.fixture(autouse=True)
 def patch_gltest_windows_stdin(monkeypatch):
     if os.name != "nt":
