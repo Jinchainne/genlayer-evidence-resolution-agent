@@ -39,4 +39,16 @@ jobs:
         run: npm run typecheck
 
       - name: Direct tests
-        run: python -m pytest tests/direct -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest tests/direct -vv -ra 2>&1 | tee pytest-direct.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            tail_text="$(tail -n 80 pytest-direct.log)"
+            escaped="${tail_text//'%'/'%25'}"
+            escaped="${escaped//$'\n'/'%0A'}"
+            escaped="${escaped//$'\r'/'%0D'}"
+            echo "::error::Direct tests failed.%0A${escaped}"
+          fi
+          exit "$status"
