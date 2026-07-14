@@ -1,95 +1,100 @@
 # GenLayer Evidence Resolution Agent
 
-GenLayer Evidence Resolution Agent is a GenLayer-native adjudication product for resolving evidence-based claims on-chain.
+GenLayer Evidence Resolution Agent is a GenLayer-native adjudication app for resolving evidence-based claims on-chain.
 
-It gives builders a working terminal-style dashboard where they can:
+It gives builders and reviewers a complete flow to:
 
 - connect a browser wallet
 - deploy or import a GenLayer Intelligent Contract
 - submit a claim with live evidence URLs
-- trigger on-chain resolution through GenLayer's non-deterministic consensus flow
-- inspect verdicts, confidence, rationale, citations, and local activity history
+- trigger on-chain resolution through GenLayer consensus
+- inspect verdict, confidence, rationale, citations, and local activity history
 
-This project was built specifically to match what GenLayer is good at: contracts that fetch live web data, use LLM judgment, and still reach consensus through validator review.
-
-## Demo
+## Live Project
 
 - GitHub: https://github.com/Jinchainne/genlayer-evidence-resolution-agent
-- Production: https://genlayer-evidence-resolution-agent.vercel.app
+- Demo: https://genlayer-evidence-resolution-agent.vercel.app
 
-## What Problem It Solves
+## Why This Project Belongs on GenLayer
 
-Normal smart contracts are strong at deterministic rules, but weak at subjective adjudication.
+Traditional smart contracts are good at deterministic rules. They are weak at judgment-based decisions such as:
 
-This project targets the class of problems where a contract must answer questions like:
-
-- is this claim supported by current public evidence?
+- is a claim supported by the current public evidence?
 - do multiple sources materially agree or contradict each other?
 - should the outcome be `SUPPORTED`, `REFUTED`, or `INCONCLUSIVE`?
 
-Those are not good fits for classic EVM-only logic. They are good fits for GenLayer.
+This project is built around exactly that category of problem.
 
-## Why This Is GenLayer-Native
-
-This repo is intentionally not an EVM app with AI branding on top.
-
-The contract uses GenLayer-native primitives:
+The intelligent contract uses GenLayer-native primitives:
 
 - `gl.nondet.web.get(...)` to fetch live evidence inside the contract
 - `gl.nondet.exec_prompt(...)` to produce structured adjudication output
-- `gl.vm.run_nondet_unsafe(...)` to run a validator-reviewed consensus path
+- `gl.vm.run_nondet_unsafe(...)` to validate a meaningful non-deterministic result through leader and validator review
 
-The validator does not merely accept a byte-for-byte identical response. It independently derives its own structured decision and compares it against the leader result using explicit rules:
+That means the verdict is not decorative UI output. It is part of the contract execution path and is written back to on-chain state after GenLayer consensus.
 
-- same verdict
-- confidence difference within tolerance
-- citation overlap for non-`INCONCLUSIVE` outcomes
+## What Makes This A Real Builder Submission
 
-That is the core reason this project aligns with GenLayer's adjudication model.
+This repo is not just:
 
-## Core Features
+- a static UI
+- a CLI-only contract demo
+- an EVM app with AI wording on top
 
-- Next.js dashboard with GenLayer builder UX
-- Browser-wallet write flow through `genlayer-js`
-- Deploy contract from UI
-- Import existing contract address
-- Create cases with title, claim, criteria, category, and up to 3 evidence URLs
-- Resolve cases on-chain through GenLayer consensus
-- Read back on-chain case state
-- Local draft persistence
-- Local activity tape
-- Verdict mix and confidence charts
-- Direct-mode contract tests
-- Studio Mode integration test scaffolding
-- CI workflow for config checks, contract checks, typecheck, and direct tests
+It already implements the full application-to-contract flow:
 
-## Product Flow
+- wallet connection
+- contract deployment from the frontend
+- contract import by address
+- claim submission through a real GenLayer client path
+- claim resolution through a GenLayer intelligent contract
+- on-chain reads for submitted and resolved cases
+
+Important source files:
+
+- frontend flow: `app/page.tsx`
+- GenLayer client integration: `lib/genlayer/client.ts`
+- intelligent contract: `contracts/GenLayerEvidenceResolutionAgent.py`
+- direct tests: `tests/direct/test_genlayer_evidence_resolution_agent.py`
+- Studio integration scaffold: `tests/integration/test_studio_claim_roundtrip.py`
+
+## Product Walkthrough
 
 ### 1. Connect wallet
 
-The app uses an injected browser wallet for all write actions.
+The app uses an injected browser wallet for write actions.
 
 ### 2. Deploy or import contract
 
-You can deploy `GenLayerEvidenceResolutionAgent` directly from the dashboard or paste an existing deployed address.
+You can either:
+
+- deploy `GenLayerEvidenceResolutionAgent` from the dashboard
+- paste an existing deployed contract address
 
 ### 3. Draft a case
 
 Each case contains:
 
 - title
-- claim statement
+- claim
 - adjudication criteria
 - category
 - one to three evidence URLs
 
 ### 4. Submit on-chain
 
-`create_case(...)` stores the claim in contract state as `SUBMITTED`.
+`create_case(...)` stores the case on-chain with status `SUBMITTED`.
 
 ### 5. Resolve through GenLayer
 
-`resolve_case(case_id)` fetches live evidence, asks for a structured judgment, and stores the accepted result on-chain as:
+`resolve_case(case_id)` does the meaningful part:
+
+- fetches live evidence from the submitted URLs
+- generates a structured adjudication result
+- checks the result through GenLayer's non-deterministic validation path
+- persists the accepted resolution back into contract state
+
+Stored resolution fields:
 
 - verdict
 - confidence
@@ -102,9 +107,9 @@ Each case contains:
 ### Frontend
 
 - Next.js App Router
-- React 19 client-side dashboard
-- Tailwind CSS retro terminal theme
-- Recharts for small, bounded visualizations
+- React 19
+- Tailwind CSS
+- Recharts
 
 ### Contract
 
@@ -124,61 +129,44 @@ Public methods:
 
 ### Storage
 
-The contract stores case records as JSON strings keyed by case id.
-
-The frontend stores local drafts, network selection, imported contract address, and activity feed in browser storage for a smoother builder workflow.
+- contract state stores case records as JSON strings keyed by case id
+- browser storage keeps local drafts, selected network, imported contract address, and activity feed
 
 ## Repository Layout
 
 ```text
 app/
-  layout.tsx
-  page.tsx
 components/ui/
 contracts/
-  GenLayerEvidenceResolutionAgent.py
 lib/genlayer/
 scripts/
 tests/direct/
 tests/integration/
+.github/workflows/
 ```
 
 ## Supported Networks
 
-The app currently supports:
+The app currently includes definitions for:
 
+- `localnet`
 - `studionet`
 - `testnetBradbury`
-- `localnet`
 
-Network definitions live in:
+Source:
 
 ```text
 lib/genlayer/networks.ts
 ```
 
-These defaults were aligned with the current GenLayer docs at the time of implementation.
-
-## Local Setup
+## Builder Setup
 
 ### Requirements
 
 - Node.js 20+
 - npm
 - Python 3.12+
-- browser wallet compatible with the GenLayer flow
-
-### Wallet setup recommendation
-
-For local development, use the documented wallet path from the official `genlayer-wallet` ecosystem:
-
-- prefer `MetaMask Flask`
-- use a dedicated development wallet
-- connect to `localnet` or `studionet` before sending writes
-
-Official reference:
-
-- https://github.com/genlayerlabs/genlayer-wallet
+- a browser wallet compatible with the GenLayer flow
 
 ### Install dependencies
 
@@ -187,9 +175,9 @@ npm install
 pip install -r requirements.txt
 ```
 
-### Configure environment
+### Optional environment defaults
 
-Copy the example env file:
+Copy the example file:
 
 ```bash
 cp .env.example .env.local
@@ -214,32 +202,29 @@ Open:
 http://localhost:3000
 ```
 
-## Quick Builder Walkthrough
+## Builder Demo Guide
 
-### Deploy a contract
+If you want to show this project to a reviewer quickly, use this path:
 
-1. Start the app
-2. Connect wallet
-3. Choose `studionet` or `localnet`
-4. Click `Deploy Contract`
-5. Save the returned contract address
+### Demo path A: UI capability check
 
-### Submit a case
+1. Open the deployed app
+2. Show the wallet connection flow
+3. Show the Contract Panel with deploy/import support
+4. Show the claim composer with evidence URLs
+5. Show that the app has `Submit On-Chain` and case resolution actions
 
-1. Load a template or draft a new claim
-2. Fill claim, criteria, and evidence URLs
-3. Click `Submit On-Chain`
+### Demo path B: code proof
 
-### Resolve a case
+Point reviewers to:
 
-1. Open the `Chain Cases` section
-2. Click `Resolve On-Chain`
-3. Wait for the transaction and GenLayer result
-4. Review the stored verdict and supporting fields
+- `app/page.tsx` for the user flow
+- `lib/genlayer/client.ts` for deploy, read, and write contract calls
+- `contracts/GenLayerEvidenceResolutionAgent.py` for web fetch, prompt execution, and validator-reviewed non-deterministic resolution
 
-## Verification
+### Demo path C: local verification
 
-Before pushing or deploying, run:
+Run:
 
 ```bash
 npm run genlayer:check
@@ -249,40 +234,69 @@ npm run build
 python -m pytest tests/direct -v
 ```
 
-## Testing
+## Step-By-Step Usage
 
-This repo includes both fast direct-mode tests and Studio Mode integration scaffolding.
+### Connect a wallet
+
+Use a wallet compatible with the GenLayer flow. For local development, MetaMask Flask is the easiest route.
+
+Reference:
+
+- https://github.com/genlayerlabs/genlayer-wallet
+
+### Deploy a contract
+
+1. Start the app
+2. Connect wallet
+3. Choose a network such as `studionet` or `localnet`
+4. Click `Deploy Contract`
+5. Save the returned contract address
+
+### Import an existing contract
+
+1. Paste the contract address into the Contract Panel
+2. Refresh contract state
+3. Review the loaded cases from chain
+
+### Submit a case
+
+1. Fill title, claim, and criteria
+2. Add one to three evidence URLs
+3. Click `Submit On-Chain`
+4. Wait for transaction acceptance
+
+### Resolve a case
+
+1. Open the chain case list
+2. Select a submitted case
+3. Click the resolve action
+4. Wait for GenLayer to accept the transaction
+5. Review verdict, rationale, confidence, and citations
+
+## Testing
 
 ### Direct tests
 
 Run:
 
 ```bash
-npm run contract:check
 python -m pytest tests/direct -v
 ```
 
-Coverage includes:
+Coverage currently includes:
 
 - case creation
 - resolution persistence
 - validator disagreement path
 - citation filtering
 
-### Studio Mode integration tests
+### Studio Mode integration scaffold
 
 Integration file:
 
 ```text
 tests/integration/test_studio_claim_roundtrip.py
 ```
-
-Current Studio coverage includes:
-
-- deploy contract through RPC
-- create claim roundtrip
-- read back stored claim
-- mocked validator-based `resolve_case(...)`
 
 Run:
 
@@ -293,36 +307,20 @@ python -m pytest tests/integration -v -m studio
 
 Prerequisites:
 
-- Studio or local GenLayer network is actually running
+- GenLayer Studio or Localnet is running
 - `gltest.config.yaml` is present
-- Python environment has `genlayer-test` installed
+- Python environment includes `genlayer-test`
 - `RUN_STUDIO_TESTS=1` is set
-
-## Contract Tooling
-
-The repo includes a Windows-safe wrapper for GenLayer lint and validation:
-
-```bash
-npm run contract:check
-```
-
-This runs `genvm-lint check` through:
-
-```text
-scripts/run-genvm-lint.py
-```
-
-It exists mainly to avoid Windows console encoding issues and keep local builder flow consistent with CI.
 
 ## CI
 
-Workflow file:
+Workflow:
 
 ```text
 .github/workflows/ci.yml
 ```
 
-Current CI runs:
+Current CI covers:
 
 - `npm run genlayer:check`
 - `npm run contract:check`
@@ -331,49 +329,44 @@ Current CI runs:
 
 ## Deployment
 
-This project deploys well on Vercel because the write path is browser-wallet initiated.
+This project is Vercel-friendly because the main write path is browser-wallet initiated.
 
-Typical deploy command:
+Deploy:
 
 ```bash
 npx vercel --prod
 ```
 
-No hidden backend signer is required for the main MVP flow.
+No backend signer is required for the core MVP flow.
 
-## Why This Is A Strong Builder Submission
+## Why Reviewers Should Care
 
-This repo is positioned as a real GenLayer project, not just a contract snippet or UI mockup.
+This repo demonstrates:
 
-It demonstrates:
-
-- a complete user flow from deploy to submit to resolve
-- meaningful non-deterministic contract behavior
-- validator-reviewed decision logic
+- a real GenLayer use case centered on adjudication
 - live web evidence fetched inside the contract
-- browser-wallet signing instead of a fake backend signer
-- testing and CI discipline
+- meaningful non-deterministic reasoning reviewed through GenLayer consensus
+- a complete builder flow from deploy to submit to resolve
+- direct contract reads and writes through a real GenLayer client path
+- test coverage and CI rather than a mock-only prototype
 
-## Current Boundaries
+## Current Scope
 
-This is a strong MVP, but it is still honest about scope.
+This is an MVP and does not yet include:
 
-Not included yet:
-
-- autonomous backend runner
-- appeal workflow
+- appeal flow
+- counter-evidence flow
+- multi-role dispute handling
 - trust-weighted evidence domains
-- richer multi-party dispute roles
-- full Studio-to-testnet end-to-end automation matrix
+- fully automated Studio-to-testnet end-to-end coverage
 
-## Best Next Iterations
+## Recommended Next Iterations
 
-- add appeal and counter-evidence flow
-- add role-based claimant/respondent case structure
-- add domain trust scoring or evidence weighting
-- add richer Studio integration coverage for more consensus branches
-- add case timeline and receipt explorer panels
-- add queue or leaderboard view for multiple active cases
+- add appeal and counter-evidence support
+- add role-based claimant/respondent structure
+- add evidence weighting or domain trust scoring
+- add richer Studio integration coverage
+- add better receipt and timeline inspection in the UI
 
 ## References
 
@@ -386,9 +379,10 @@ Not included yet:
 
 ## Submission Positioning
 
-If you use this for a GenLayer builder submission, the strongest short positioning is:
+### Short version
 
-- this is a GenLayer-native evidence adjudication agent
-- the contract fetches live public web evidence
-- the verdict depends on validator-reviewed non-deterministic reasoning
-- the app exposes the full builder flow in a clear browser-wallet dashboard
+GenLayer Evidence Resolution Agent is a GenLayer-native adjudication app where an intelligent contract fetches live evidence, produces a structured verdict through validator-reviewed non-deterministic reasoning, and writes the accepted result back on-chain.
+
+### Builder version
+
+This project shows a complete GenLayer product loop: a user can deploy an intelligent contract, submit an evidence-backed claim, have the contract fetch live public sources and resolve the case through GenLayer consensus, then read the accepted verdict back from chain in the frontend.
