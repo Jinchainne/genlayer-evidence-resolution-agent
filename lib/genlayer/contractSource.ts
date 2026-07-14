@@ -123,8 +123,7 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
 
                 Input:
                 {adjudication_input}
-                """,
-                response_format="json",
+                """
             )
 
         def validator_fn(leader_result) -> bool:
@@ -168,8 +167,7 @@ class GenLayerEvidenceResolutionAgent(gl.Contract):
 
                 Input:
                 {adjudication_input}
-                """,
-                response_format="json",
+                """
             )
             validator_candidate = parse_candidate(validator_raw)
             if validator_candidate is None:
